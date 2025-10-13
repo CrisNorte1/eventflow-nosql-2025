@@ -1,0 +1,28 @@
+# Python / FastAPI
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Entornos / variables
+.env
+*.env
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Docker volúmenes locales
+data/
+*.sqlite3
+
+# Pruebas / reports
+htmlcov/
+.coverage*
+.pytest_cache/
+
+# SO
+.DS_Store
+Thumbs.db

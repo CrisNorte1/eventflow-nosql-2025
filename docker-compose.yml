@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  mongodb:
+    image: mongo:6
+    container_name: eventflow-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongodb:/data/db
+
+  redis:
+    image: redis:7
+    container_name: eventflow-redis
+    restart: always
+    ports:
+      - "6379:6379"
