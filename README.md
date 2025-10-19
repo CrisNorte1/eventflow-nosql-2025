@@ -151,3 +151,13 @@ uvicorn reservas_pagos_service.main:app --reload --port 8003
 | Usuarios         | [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) |
 | Eventos          | [http://127.0.0.1:8002/docs](http://127.0.0.1:8002/docs) |
 | Reservas y Pagos | [http://127.0.0.1:8003/docs](http://127.0.0.1:8003/docs) |
+
+
+👥 Integrantes
+
+Cristian Norte
+Santiago Iroldi
+
+📅 Fecha de entrega
+
+10 de noviembre de 2025
