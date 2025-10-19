@@ -125,3 +125,29 @@ Esto combina **orquestación SAGA** con una **implementación modular y extensib
   "entradas_disponibles": 8500
 }
 ```
+### 🚀 Ejecución del Proyecto
+1️⃣ Levantar MongoDB y Redis con Docker
+```bash
+docker-compose up -d
+```
+2️⃣ Activar entorno virtual
+```bash
+venv\Scripts\activate
+```
+3️⃣ Ejecutar los microservicios
+```bash
+# Usuarios
+uvicorn usuarios_service.main:app --reload --port 8001
+
+# Eventos
+uvicorn eventos_service.main:app --reload --port 8002
+
+# Reservas y Pagos
+uvicorn reservas_pagos_service.main:app --reload --port 8003
+```
+4️⃣ Probar endpoints
+| Servicio         | URL Swagger                                              |
+| ---------------- | -------------------------------------------------------- |
+| Usuarios         | [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) |
+| Eventos          | [http://127.0.0.1:8002/docs](http://127.0.0.1:8002/docs) |
+| Reservas y Pagos | [http://127.0.0.1:8003/docs](http://127.0.0.1:8003/docs) |
