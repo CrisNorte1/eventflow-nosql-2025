@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from reservas_pagos_service.chain import (
-    SolicitudReserva, ValidadorDatos, ValidadorInventario, ProcesadorPago, ConfirmadorReserva
-)
+from reservas_pagos_service.chain import *
 
 app = FastAPI(title="Servicio de Reservas y Pagos - EventFlow")
 
@@ -15,8 +13,8 @@ def health():
     return {"status": "ok"}
 
 @app.post("/api/reservar")
-def reservar(body: ReservaRequest):
-    chain = ValidadorDatos(
+def reservar(body: ReservaRequest): 
+    chain = ValidadorDatos( # Chain of Responsibility 
                 ValidadorInventario(
                     ProcesadorPago(
                         ConfirmadorReserva()
