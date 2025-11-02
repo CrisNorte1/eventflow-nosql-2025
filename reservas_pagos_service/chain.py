@@ -1,38 +1,51 @@
 from abc import ABC, abstractmethod
-from reservas_pagos_service.infra import redis_client, eventos_col, get_evento_http, get_usuario_http
+from dataclasses import dataclass
+from typing import Optional
 
-LOCK_TTL_SECONDS = 60 # Tiempo de vida del lock en segundos
+from reservas_pagos_service.infra import (
+    redis_client,
+    eventos_col,
+    usuarios_col,
+    get_usuario_http,
+)
+from reservas_pagos_service.saga import Saga, SagaError, SagaStep
 
-class SolicitudReserva: # Es el request que se pasa por la cadena
-    def __init__(self, evento_id: str, email: str):
-        self.evento_id = evento_id
-        self.email = email
+LOCK_TTL_SECONDS = 60  # Tiempo de vida del lock en segundos
 
-class Handler(ABC): # Handler base para la cadena de responsabilidad
+
+@dataclass
+class SolicitudReserva:
+    evento_id: str
+    email: str
+    lock_key: Optional[str] = None
+
+
+class Handler(ABC):  # Handler base para la cadena de responsabilidad
     def __init__(self, next_handler=None):
         self.next = next_handler
 
     @abstractmethod
-    def handle(self, req: SolicitudReserva): # Abstracto, se implementa en subclases
-        pass
+    def handle(self, req: SolicitudReserva):  # Maneja la solicitud de reserva
+        raise NotImplementedError
 
-    def next_handle(self, req: SolicitudReserva): # Llama al siguiente handler si existe
+    def next_handle(self, req: SolicitudReserva):  # Llama al siguiente handler si existe
         if self.next:
             return self.next.handle(req)
         return {"status": "ok"}
 
-class ValidadorDatos(Handler): # Valida que los datos estén completos y el usuario exista
+
+class ValidadorDatos(Handler):  # Valida que los datos de la solicitud sean correctos
     def handle(self, req: SolicitudReserva):
         if not req.evento_id or not req.email:
             return {"status": "error", "reason": "Datos incompletos"}
-        # Verificar que usuario exista (por REST)
         try:
             get_usuario_http(req.email)
         except Exception:
             return {"status": "error", "reason": "Usuario inexistente"}
         return self.next_handle(req)
 
-class ValidadorInventario(Handler): # Valida que el evento exista y tenga disponibilidad
+
+class ValidadorInventario(Handler):  # Valida que haya inventario disponible y bloquea el evento
     def handle(self, req: SolicitudReserva):
         evt = eventos_col.find_one({"id": req.evento_id})
         if not evt:
@@ -40,38 +53,103 @@ class ValidadorInventario(Handler): # Valida que el evento exista y tenga dispon
         if evt["entradas_disponibles"] <= 0:
             return {"status": "error", "reason": "Sin disponibilidad"}
 
-        # Establecemos lock en Redis para evitar dobles reservas concurrentes
-        lock_key = f"lock:evt:{req.evento_id}" # formateamos la clave del lock "lock:evt:<evento_id>"
-        locked = redis_client.set(lock_key, req.email, nx=True, ex=LOCK_TTL_SECONDS) # Intentamos obtener el lock
-        if not locked: # Si no se pudo obtener el lock para el evento que se está reservando
+        lock_key = f"lock:evt:{req.evento_id}"  # Lock para el evento
+        locked = redis_client.set(lock_key, req.email, nx=True, ex=LOCK_TTL_SECONDS)  # Si existe, no lo bloquea
+        if not locked:  # Si existe el lock, otro proceso lo esta manejando
             return {"status": "error", "reason": "Evento bloqueado, intente nuevamente"}
 
-        # Guardamos la clave de lock en el request (para liberar/compensar)
         req.lock_key = lock_key
         return self.next_handle(req)
 
-class ProcesadorPago(Handler):
-    def handle(self, req: SolicitudReserva):
-        pago_exitoso = True # Asumimos que el pago es exitoso
-        if not pago_exitoso: # Simulamos un pago fallido
-            if hasattr(req, "lock_key"): # Si hay lock, lo liberamos
-                redis_client.delete(req.lock_key)
-            return {"status": "error", "reason": "Pago rechazado"}
-        return self.next_handle(req) # Continuamos al siguiente handler
 
-class ConfirmadorReserva(Handler):
+class ReservaSagaContext:
+    def __init__(self, solicitud: SolicitudReserva):
+        self.solicitud = solicitud
+        self.pago_confirmado = False
+        self.inventario_actualizado = False
+        self.historial_actualizado = False
+
+
+class ConfirmadorReserva(Handler):  # Confirma la reserva usando una saga
     def handle(self, req: SolicitudReserva):
-        result = eventos_col.update_one(
-            {"id": req.evento_id, "entradas_disponibles": {"$gt": 0}}, # Se asegura que haya disponibilidad
-            {"$inc": {"entradas_disponibles": -1}} # Resta en 1 las entradas disponibles
+        context = ReservaSagaContext(req)
+        saga = Saga(
+            [
+                SagaStep( # Paso de la saga
+                    "procesar_pago",
+                    self._procesar_pago,
+                    self._compensar_pago,
+                ),
+                SagaStep(
+                    "descontar_inventario",
+                    self._descontar_inventario,
+                    self._restaurar_inventario,
+                ),
+                SagaStep(
+                    "actualizar_historial",
+                    self._registrar_historial,
+                    self._revertir_historial,
+                ),
+            ]
         )
-        if result.modified_count != 1: # Si no se modificó nada, significa que no se pudo reservar
-            if hasattr(req, "lock_key"):
-                redis_client.delete(req.lock_key) # liberar el lock
-            return {"status": "error", "reason": "No se pudo confirmar (competencia)"}
 
-        # liberar el lock (o dejar que expire)
-        if hasattr(req, "lock_key"):
-            redis_client.delete(req.lock_key)
+        try:
+            saga.execute(context)
+            return {"status": "ok", "mensaje": "Reserva confirmada"}
+        except SagaError as err:
+            return {"status": "error", "reason": err.reason}
+        finally:
+            if req.lock_key:
+                redis_client.delete(req.lock_key)
 
-        return {"status": "ok", "mensaje": "Reserva confirmada"}
+    @staticmethod
+    def _procesar_pago(ctx: ReservaSagaContext):
+        # No vamos a implementar un pago real porque es un monton; simulamos exito
+        ctx.pago_confirmado = True
+
+    @staticmethod
+    def _compensar_pago(ctx: ReservaSagaContext):
+        if ctx.pago_confirmado:
+            # Lo mismo, simulamos la compensacion
+            ctx.pago_confirmado = False
+
+    @staticmethod
+    def _descontar_inventario(ctx: ReservaSagaContext):  # Descuenta una entrada del inventario
+        solicitud = ctx.solicitud
+        result = eventos_col.update_one(
+            {"id": solicitud.evento_id, "entradas_disponibles": {"$gt": 0}},  # Verifica que haya entradas disponibles
+            {"$inc": {"entradas_disponibles": -1}},
+        )
+        if result.modified_count != 1:
+            raise SagaError("No se pudo confirmar (competencia)")
+        ctx.inventario_actualizado = True  # Marca que se actualizo el inventario
+
+    @staticmethod
+    def _restaurar_inventario(ctx: ReservaSagaContext):  # Restaura una entrada al inventario
+        if ctx.inventario_actualizado:
+            eventos_col.update_one(
+                {"id": ctx.solicitud.evento_id},
+                {"$inc": {"entradas_disponibles": 1}},
+            )
+            ctx.inventario_actualizado = False
+
+    @staticmethod
+    def _registrar_historial(ctx: ReservaSagaContext):  # Actualiza el historial de compras del usuario
+        solicitud = ctx.solicitud
+        resultado = usuarios_col.update_one(
+            {"email": solicitud.email},
+            {"$push": {"historial_compras": solicitud.evento_id}},
+        )
+        if resultado.modified_count != 1:
+            raise SagaError("No se pudo actualizar el historial")
+        ctx.historial_actualizado = True # Marca que se actualizo el historial
+
+    @staticmethod
+    def _revertir_historial(ctx: ReservaSagaContext): # Revierte la actualizacion del historial de compras
+        if ctx.historial_actualizado:
+            usuarios_col.update_one(
+                {"email": ctx.solicitud.email},
+                {"$pull": {"historial_compras": ctx.solicitud.evento_id}},
+            )
+            ctx.historial_actualizado = False  # Marca que se revirtio el historial
+            

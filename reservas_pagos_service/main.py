@@ -16,9 +16,8 @@ def health():
 def reservar(body: ReservaRequest): 
     chain = ValidadorDatos( # Chain of Responsibility 
                 ValidadorInventario(
-                    ProcesadorPago(
-                        ConfirmadorReserva()
-                    )))
+                    ConfirmadorReserva()
+                ))
     req = SolicitudReserva(evento_id=body.evento_id, email=body.email)
     result = chain.handle(req)
     return result

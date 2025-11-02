@@ -9,6 +9,7 @@ redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=T
 mongo = MongoClient("mongodb://localhost:27017/")
 db = mongo["eventflow"]
 eventos_col = db["eventos"]
+usuarios_col = db["usuarios"]
 
 # Helpers HTTP (si querés consultar servicios por REST)
 def get_evento_http(evento_id: str):
