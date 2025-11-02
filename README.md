@@ -162,25 +162,29 @@ Santiago Iroldi
 10 de noviembre de 2025
 * * *
 # Opcionales
-## Opcional 4 - Event Sourcing y CQRS
+## 🧩 Opcional 4 - Event Sourcing y CQRS
 
+**Event Sourcing (ES):**
+En lugar de almacenar el estado actual de una entidad (ej. "entradas_disponibles: 50"), se almacenan todos los eventos que la afectaron (ej. "ReservaCreada", "PagoProcesado", "ReservaCancelada"). El estado actual se reconstruye aplicando estos eventos en secuencia. Esto permite auditoría completa, reconstrucción histórica y resiliencia.
 
-**Event Sourcing (ES):** En lugar de almacenar el estado actual de una entidad (ej. "entradas_disponibles: 50"), se almacenan todos los eventos que la afectaron (ej. "ReservaCreada", "PagoProcesado", "ReservaCancelada"). El estado actual se reconstruye aplicando estos eventos en secuencia. Esto permite auditoría completa, reconstrucción histórica y resiliencia.
+**CQRS (Command Query Responsibility Segregation):**
+Separa las operaciones de escritura (comandos) de las de lectura (queries). Los comandos cambian el estado (escriben eventos), las queries leen vistas optimizadas (proyecciones). Esto mejora escalabilidad y rendimiento en sistemas de alta carga.
 
-**CQRS (Command Query Responsibility Segregation):**  Separa las operaciones de escritura (comandos) de las de lectura (queries). Los comandos cambian el estado (escriben eventos), las queries leen vistas optimizadas (proyecciones). Esto mejora escalabilidad y rendimiento en sistemas de alta carga.
-
-### Escenario Beneficioso en EventFlow
+### 🎯 Escenario Beneficioso en EventFlow
 Estos patrones se podrían aplicar  para el Servicio de Reservas y Pagos porque:
 
-**Auditoría:** Con event sourcing se podría rastrear cada reserva/opago Necesitas para evitar fraudes, resolver disputas o cumplir regulaciones que exigan trazabilidad de las transacciones. Event Sourcing nosm permitiría reconstruir el historial completo de un evento o usuario.
-**Análisis y Reportes:** Para metricas como patrones de compra por evento o tasa de conversión de reservas, CQRS permite queries optimizadas sin afectar el rendimiento de escrituras críticas.
+- 🔍 **Auditoría:**
+Con event sourcing se podría rastrear cada reserva/opago Necesitas para evitar fraudes, resolver disputas o cumplir regulaciones que exigan trazabilidad de las transacciones. Event Sourcing nosm permitiría reconstruir el historial completo de un evento o usuario.
 
-**Escalabilidad:** Las lecturas (ej: consultar las entradas disponibles de un evento X) pueden ser mucho más frecuentes que las escrituras (reservas). Con CQRS podríanmos escalar nodos de lecturas independientemente sin afectar la escritura.
+- 📊 **Análisis y Reportes:** Para metricas como patrones de compra por evento o tasa de conversión de reservas, CQRS permite queries optimizadas sin afectar el rendimiento de escrituras críticas.
 
-**Consistencia Eventual:** Alinea con los requerimientos de consistencia eventual para lecturas rápidas, mientras mantiene consistencia fuerte en escrituras (reservas únicas).
+- ⚡ **Escalabilidad:** Las lecturas (ej: consultar las entradas disponibles de un evento X) pueden ser mucho más frecuentes que las escrituras (reservas). Con CQRS podríanmos escalar nodos de lecturas independientemente sin afectar la escritura.
+
+- 🔄 **Consistencia Eventual:** Alinea con los requerimientos de consistencia eventual para lecturas rápidas, mientras mantiene consistencia fuerte en escrituras (reservas únicas).
 
 
-**Diferencia con la Solución Actual (MongoDB + Redis):** Actualmente, MongoDB almacena el estado mutable (ej. entradas_disponibles), y Redis maneja locks temporales. Esto es simple pero limita la auditoría (no hay historial de cambios) y puede tener problemas de consistencia en fallos. Con ES/CQRS, tendrías un event store inmutable para todas las transacciones, y proyecciones separadas para lecturas. Redis seguiría para locks temporales, pero el estado se derivaría de eventos.
+### 🆚 Diferencia con la Solución Actual
+Actualmente, MongoDB almacena el estado mutable (ej. entradas_disponibles), y Redis maneja locks temporales. Esto es simple pero limita la auditoría (no hay historial de cambios) y puede tener problemas de consistencia en fallos. Con ES/CQRS, tendrías un event store inmutable para todas las transacciones, y proyecciones separadas para lecturas. Redis seguiría para locks temporales, pero el estado se derivaría de eventos.
 
 --
 
@@ -216,4 +220,5 @@ El objetivo fue **validar la exclusión mutua** implementada con **Redis** y obs
   - `View Results Tree` (para visualizar cada respuesta individual)  
 - **Timers / Assertions:**  
   - No definidos en este plan  
+
 
